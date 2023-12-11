@@ -4,18 +4,14 @@ import {
     AwsEvent
 } from '@slack/bolt/dist/receivers/AwsLambdaReceiver';
 import { isAxiosError } from 'axios';
-import {
-    ChatCompletionRequestMessage,
-    Configuration,
-    OpenAIApi
-} from 'openai';
+import OpenAI from 'openai';
 
 if (!process.env.SLACK_SIGNING_SECRET) process.exit(1);
 
-const configuration = new Configuration({
+const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY
 });
-const openai = new OpenAIApi(configuration);
+
 
 const awsLambdaReceiver = new AwsLambdaReceiver({
     signingSecret: process.env.SLACK_SIGNING_SECRET
@@ -48,8 +44,7 @@ app.event('app_mention', async ({ event, context, client, say }) => {
                 channel,
                 ts: threadTs
             });
-            const chatCompletionRequestMessage: ChatCompletionRequestMessage[] =
-                [];
+            const chatCompletionRequestMessage: OpenAI.ChatCompletionMessageParam[] =  [];
             threadResponse.messages?.forEach((message) => {
                 const { text, user } = message;
                 if (!text) return;
@@ -68,11 +63,11 @@ app.event('app_mention', async ({ event, context, client, say }) => {
                     });
                 }
             });
-            const completion = await openai.createChatCompletion({
+            const completion = await openai.chat.completions.create({
                 model: 'gpt-4',
                 messages: chatCompletionRequestMessage
             });
-            const outputText = completion.data.choices
+            const outputText = completion.choices
                 .map(({ message }) => message?.content)
                 .join('');
             await client.chat.postMessage({
