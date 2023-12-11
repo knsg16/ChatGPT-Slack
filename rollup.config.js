@@ -14,5 +14,6 @@ export default {
         resolve(),
         commonjs(),
         json(),
-    ]
+    ],
+    context: 'window',
 };
