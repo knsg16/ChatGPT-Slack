@@ -83751,8 +83751,15 @@ var OpenAI$1 = OpenAI;
 
 if (!process.env.SLACK_SIGNING_SECRET)
     process.exit(1);
+const resource = 'michibiku'; //エンドポイントの最初の文字列 "リソース名".openai.azure.com
+const model = 'gpt-4'; //作ったモデル名
+const apiVersion = '2023-05-15';
+const apiKey = process.env.OPENAI_API_KEY;
 const openai = new OpenAI$1({
-    apiKey: process.env.OPENAI_API_KEY
+    apiKey,
+    baseURL: `https://${resource}.openai.azure.com/openai/deployments/${model}`,
+    defaultQuery: { 'api-version': apiVersion },
+    defaultHeaders: { 'api-key': apiKey },
 });
 const awsLambdaReceiver = new dist$6.AwsLambdaReceiver({
     signingSecret: process.env.SLACK_SIGNING_SECRET

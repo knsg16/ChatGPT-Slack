@@ -8,9 +8,18 @@ import OpenAI from 'openai';
 
 if (!process.env.SLACK_SIGNING_SECRET) process.exit(1);
 
+const resource = 'michibiku'; //エンドポイントの最初の文字列 "リソース名".openai.azure.com
+const model = 'gpt-4'; //作ったモデル名
+
+const apiVersion = '2023-05-15';
+const apiKey = process.env.OPENAI_API_KEY;
 const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY
+    apiKey,
+    baseURL: `https://${resource}.openai.azure.com/openai/deployments/${model}`,
+    defaultQuery: { 'api-version': apiVersion },
+    defaultHeaders: { 'api-key': apiKey },
 });
+
 
 
 const awsLambdaReceiver = new AwsLambdaReceiver({
