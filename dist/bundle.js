@@ -213,29 +213,35 @@ var dist$5 = {};
 
 var WebClient = {};
 
-var isStream$4 = {exports: {}};
+var isStream$3 = {exports: {}};
 
-var isStream$3 = isStream$4.exports = function (stream) {
-	return stream !== null && typeof stream === 'object' && typeof stream.pipe === 'function';
-};
+var hasRequiredIsStream;
 
-isStream$3.writable = function (stream) {
-	return isStream$3(stream) && stream.writable !== false && typeof stream._write === 'function' && typeof stream._writableState === 'object';
-};
+function requireIsStream () {
+	if (hasRequiredIsStream) return isStream$3.exports;
+	hasRequiredIsStream = 1;
 
-isStream$3.readable = function (stream) {
-	return isStream$3(stream) && stream.readable !== false && typeof stream._read === 'function' && typeof stream._readableState === 'object';
-};
+	var isStream = isStream$3.exports = function (stream) {
+		return stream !== null && typeof stream === 'object' && typeof stream.pipe === 'function';
+	};
 
-isStream$3.duplex = function (stream) {
-	return isStream$3.writable(stream) && isStream$3.readable(stream);
-};
+	isStream.writable = function (stream) {
+		return isStream(stream) && stream.writable !== false && typeof stream._write === 'function' && typeof stream._writableState === 'object';
+	};
 
-isStream$3.transform = function (stream) {
-	return isStream$3.duplex(stream) && typeof stream._transform === 'function' && typeof stream._transformState === 'object';
-};
+	isStream.readable = function (stream) {
+		return isStream(stream) && stream.readable !== false && typeof stream._read === 'function' && typeof stream._readableState === 'object';
+	};
 
-var isStreamExports = isStream$4.exports;
+	isStream.duplex = function (stream) {
+		return isStream.writable(stream) && isStream.readable(stream);
+	};
+
+	isStream.transform = function (stream) {
+		return isStream.duplex(stream) && typeof stream._transform === 'function' && typeof stream._transformState === 'object';
+	};
+	return isStream$3.exports;
+}
 
 var dist$4 = {};
 
@@ -992,364 +998,392 @@ class PQueue extends EventEmitter$4 {
 }
 dist$4.default = PQueue;
 
-var pRetry$1 = {exports: {}};
+var pRetry = {exports: {}};
 
-var retry$2 = {};
+var retry$1 = {};
 
-function RetryOperation(timeouts, options) {
-  // Compatibility for the old (timeouts, retryForever) signature
-  if (typeof options === 'boolean') {
-    options = { forever: options };
-  }
+var retry_operation;
+var hasRequiredRetry_operation;
 
-  this._originalTimeouts = JSON.parse(JSON.stringify(timeouts));
-  this._timeouts = timeouts;
-  this._options = options || {};
-  this._maxRetryTime = options && options.maxRetryTime || Infinity;
-  this._fn = null;
-  this._errors = [];
-  this._attempts = 1;
-  this._operationTimeout = null;
-  this._operationTimeoutCb = null;
-  this._timeout = null;
-  this._operationStart = null;
-  this._timer = null;
+function requireRetry_operation () {
+	if (hasRequiredRetry_operation) return retry_operation;
+	hasRequiredRetry_operation = 1;
+	function RetryOperation(timeouts, options) {
+	  // Compatibility for the old (timeouts, retryForever) signature
+	  if (typeof options === 'boolean') {
+	    options = { forever: options };
+	  }
 
-  if (this._options.forever) {
-    this._cachedTimeouts = this._timeouts.slice(0);
-  }
-}
-var retry_operation = RetryOperation;
+	  this._originalTimeouts = JSON.parse(JSON.stringify(timeouts));
+	  this._timeouts = timeouts;
+	  this._options = options || {};
+	  this._maxRetryTime = options && options.maxRetryTime || Infinity;
+	  this._fn = null;
+	  this._errors = [];
+	  this._attempts = 1;
+	  this._operationTimeout = null;
+	  this._operationTimeoutCb = null;
+	  this._timeout = null;
+	  this._operationStart = null;
+	  this._timer = null;
 
-RetryOperation.prototype.reset = function() {
-  this._attempts = 1;
-  this._timeouts = this._originalTimeouts.slice(0);
-};
+	  if (this._options.forever) {
+	    this._cachedTimeouts = this._timeouts.slice(0);
+	  }
+	}
+	retry_operation = RetryOperation;
 
-RetryOperation.prototype.stop = function() {
-  if (this._timeout) {
-    clearTimeout(this._timeout);
-  }
-  if (this._timer) {
-    clearTimeout(this._timer);
-  }
-
-  this._timeouts       = [];
-  this._cachedTimeouts = null;
-};
-
-RetryOperation.prototype.retry = function(err) {
-  if (this._timeout) {
-    clearTimeout(this._timeout);
-  }
-
-  if (!err) {
-    return false;
-  }
-  var currentTime = new Date().getTime();
-  if (err && currentTime - this._operationStart >= this._maxRetryTime) {
-    this._errors.push(err);
-    this._errors.unshift(new Error('RetryOperation timeout occurred'));
-    return false;
-  }
-
-  this._errors.push(err);
-
-  var timeout = this._timeouts.shift();
-  if (timeout === undefined) {
-    if (this._cachedTimeouts) {
-      // retry forever, only keep last error
-      this._errors.splice(0, this._errors.length - 1);
-      timeout = this._cachedTimeouts.slice(-1);
-    } else {
-      return false;
-    }
-  }
-
-  var self = this;
-  this._timer = setTimeout(function() {
-    self._attempts++;
-
-    if (self._operationTimeoutCb) {
-      self._timeout = setTimeout(function() {
-        self._operationTimeoutCb(self._attempts);
-      }, self._operationTimeout);
-
-      if (self._options.unref) {
-          self._timeout.unref();
-      }
-    }
-
-    self._fn(self._attempts);
-  }, timeout);
-
-  if (this._options.unref) {
-      this._timer.unref();
-  }
-
-  return true;
-};
-
-RetryOperation.prototype.attempt = function(fn, timeoutOps) {
-  this._fn = fn;
-
-  if (timeoutOps) {
-    if (timeoutOps.timeout) {
-      this._operationTimeout = timeoutOps.timeout;
-    }
-    if (timeoutOps.cb) {
-      this._operationTimeoutCb = timeoutOps.cb;
-    }
-  }
-
-  var self = this;
-  if (this._operationTimeoutCb) {
-    this._timeout = setTimeout(function() {
-      self._operationTimeoutCb();
-    }, self._operationTimeout);
-  }
-
-  this._operationStart = new Date().getTime();
-
-  this._fn(this._attempts);
-};
-
-RetryOperation.prototype.try = function(fn) {
-  console.log('Using RetryOperation.try() is deprecated');
-  this.attempt(fn);
-};
-
-RetryOperation.prototype.start = function(fn) {
-  console.log('Using RetryOperation.start() is deprecated');
-  this.attempt(fn);
-};
-
-RetryOperation.prototype.start = RetryOperation.prototype.try;
-
-RetryOperation.prototype.errors = function() {
-  return this._errors;
-};
-
-RetryOperation.prototype.attempts = function() {
-  return this._attempts;
-};
-
-RetryOperation.prototype.mainError = function() {
-  if (this._errors.length === 0) {
-    return null;
-  }
-
-  var counts = {};
-  var mainError = null;
-  var mainErrorCount = 0;
-
-  for (var i = 0; i < this._errors.length; i++) {
-    var error = this._errors[i];
-    var message = error.message;
-    var count = (counts[message] || 0) + 1;
-
-    counts[message] = count;
-
-    if (count >= mainErrorCount) {
-      mainError = error;
-      mainErrorCount = count;
-    }
-  }
-
-  return mainError;
-};
-
-(function (exports) {
-	var RetryOperation = retry_operation;
-
-	exports.operation = function(options) {
-	  var timeouts = exports.timeouts(options);
-	  return new RetryOperation(timeouts, {
-	      forever: options && (options.forever || options.retries === Infinity),
-	      unref: options && options.unref,
-	      maxRetryTime: options && options.maxRetryTime
-	  });
+	RetryOperation.prototype.reset = function() {
+	  this._attempts = 1;
+	  this._timeouts = this._originalTimeouts.slice(0);
 	};
 
-	exports.timeouts = function(options) {
-	  if (options instanceof Array) {
-	    return [].concat(options);
+	RetryOperation.prototype.stop = function() {
+	  if (this._timeout) {
+	    clearTimeout(this._timeout);
+	  }
+	  if (this._timer) {
+	    clearTimeout(this._timer);
 	  }
 
-	  var opts = {
-	    retries: 10,
-	    factor: 2,
-	    minTimeout: 1 * 1000,
-	    maxTimeout: Infinity,
-	    randomize: false
-	  };
-	  for (var key in options) {
-	    opts[key] = options[key];
-	  }
-
-	  if (opts.minTimeout > opts.maxTimeout) {
-	    throw new Error('minTimeout is greater than maxTimeout');
-	  }
-
-	  var timeouts = [];
-	  for (var i = 0; i < opts.retries; i++) {
-	    timeouts.push(this.createTimeout(i, opts));
-	  }
-
-	  if (options && options.forever && !timeouts.length) {
-	    timeouts.push(this.createTimeout(i, opts));
-	  }
-
-	  // sort the array numerically ascending
-	  timeouts.sort(function(a,b) {
-	    return a - b;
-	  });
-
-	  return timeouts;
+	  this._timeouts       = [];
+	  this._cachedTimeouts = null;
 	};
 
-	exports.createTimeout = function(attempt, opts) {
-	  var random = (opts.randomize)
-	    ? (Math.random() + 1)
-	    : 1;
-
-	  var timeout = Math.round(random * Math.max(opts.minTimeout, 1) * Math.pow(opts.factor, attempt));
-	  timeout = Math.min(timeout, opts.maxTimeout);
-
-	  return timeout;
-	};
-
-	exports.wrap = function(obj, options, methods) {
-	  if (options instanceof Array) {
-	    methods = options;
-	    options = null;
+	RetryOperation.prototype.retry = function(err) {
+	  if (this._timeout) {
+	    clearTimeout(this._timeout);
 	  }
 
-	  if (!methods) {
-	    methods = [];
-	    for (var key in obj) {
-	      if (typeof obj[key] === 'function') {
-	        methods.push(key);
-	      }
+	  if (!err) {
+	    return false;
+	  }
+	  var currentTime = new Date().getTime();
+	  if (err && currentTime - this._operationStart >= this._maxRetryTime) {
+	    this._errors.push(err);
+	    this._errors.unshift(new Error('RetryOperation timeout occurred'));
+	    return false;
+	  }
+
+	  this._errors.push(err);
+
+	  var timeout = this._timeouts.shift();
+	  if (timeout === undefined) {
+	    if (this._cachedTimeouts) {
+	      // retry forever, only keep last error
+	      this._errors.splice(0, this._errors.length - 1);
+	      timeout = this._cachedTimeouts.slice(-1);
+	    } else {
+	      return false;
 	    }
 	  }
 
-	  for (var i = 0; i < methods.length; i++) {
-	    var method   = methods[i];
-	    var original = obj[method];
+	  var self = this;
+	  this._timer = setTimeout(function() {
+	    self._attempts++;
 
-	    obj[method] = function retryWrapper(original) {
-	      var op       = exports.operation(options);
-	      var args     = Array.prototype.slice.call(arguments, 1);
-	      var callback = args.pop();
+	    if (self._operationTimeoutCb) {
+	      self._timeout = setTimeout(function() {
+	        self._operationTimeoutCb(self._attempts);
+	      }, self._operationTimeout);
 
-	      args.push(function(err) {
-	        if (op.retry(err)) {
-	          return;
-	        }
-	        if (err) {
-	          arguments[0] = op.mainError();
-	        }
-	        callback.apply(this, arguments);
-	      });
+	      if (self._options.unref) {
+	          self._timeout.unref();
+	      }
+	    }
 
-	      op.attempt(function() {
-	        original.apply(obj, args);
-	      });
-	    }.bind(obj, original);
-	    obj[method].options = options;
+	    self._fn(self._attempts);
+	  }, timeout);
+
+	  if (this._options.unref) {
+	      this._timer.unref();
 	  }
-	}; 
-} (retry$2));
 
-var retry$1 = retry$2;
-
-const retry = retry$1;
-
-const networkErrorMsgs = [
-	'Failed to fetch', // Chrome
-	'NetworkError when attempting to fetch resource.', // Firefox
-	'The Internet connection appears to be offline.', // Safari
-	'Network request failed' // `cross-fetch`
-];
-
-class AbortError extends Error {
-	constructor(message) {
-		super();
-
-		if (message instanceof Error) {
-			this.originalError = message;
-			({message} = message);
-		} else {
-			this.originalError = new Error(message);
-			this.originalError.stack = this.stack;
-		}
-
-		this.name = 'AbortError';
-		this.message = message;
-	}
-}
-
-const decorateErrorWithCounts = (error, attemptNumber, options) => {
-	// Minus 1 from attemptNumber because the first attempt does not count as a retry
-	const retriesLeft = options.retries - (attemptNumber - 1);
-
-	error.attemptNumber = attemptNumber;
-	error.retriesLeft = retriesLeft;
-	return error;
-};
-
-const isNetworkError = errorMessage => networkErrorMsgs.includes(errorMessage);
-
-const pRetry = (input, options) => new Promise((resolve, reject) => {
-	options = {
-		onFailedAttempt: () => {},
-		retries: 10,
-		...options
+	  return true;
 	};
 
-	const operation = retry.operation(options);
+	RetryOperation.prototype.attempt = function(fn, timeoutOps) {
+	  this._fn = fn;
 
-	operation.attempt(async attemptNumber => {
-		try {
-			resolve(await input(attemptNumber));
-		} catch (error) {
-			if (!(error instanceof Error)) {
-				reject(new TypeError(`Non-error was thrown: "${error}". You should only throw errors.`));
-				return;
+	  if (timeoutOps) {
+	    if (timeoutOps.timeout) {
+	      this._operationTimeout = timeoutOps.timeout;
+	    }
+	    if (timeoutOps.cb) {
+	      this._operationTimeoutCb = timeoutOps.cb;
+	    }
+	  }
+
+	  var self = this;
+	  if (this._operationTimeoutCb) {
+	    this._timeout = setTimeout(function() {
+	      self._operationTimeoutCb();
+	    }, self._operationTimeout);
+	  }
+
+	  this._operationStart = new Date().getTime();
+
+	  this._fn(this._attempts);
+	};
+
+	RetryOperation.prototype.try = function(fn) {
+	  console.log('Using RetryOperation.try() is deprecated');
+	  this.attempt(fn);
+	};
+
+	RetryOperation.prototype.start = function(fn) {
+	  console.log('Using RetryOperation.start() is deprecated');
+	  this.attempt(fn);
+	};
+
+	RetryOperation.prototype.start = RetryOperation.prototype.try;
+
+	RetryOperation.prototype.errors = function() {
+	  return this._errors;
+	};
+
+	RetryOperation.prototype.attempts = function() {
+	  return this._attempts;
+	};
+
+	RetryOperation.prototype.mainError = function() {
+	  if (this._errors.length === 0) {
+	    return null;
+	  }
+
+	  var counts = {};
+	  var mainError = null;
+	  var mainErrorCount = 0;
+
+	  for (var i = 0; i < this._errors.length; i++) {
+	    var error = this._errors[i];
+	    var message = error.message;
+	    var count = (counts[message] || 0) + 1;
+
+	    counts[message] = count;
+
+	    if (count >= mainErrorCount) {
+	      mainError = error;
+	      mainErrorCount = count;
+	    }
+	  }
+
+	  return mainError;
+	};
+	return retry_operation;
+}
+
+var hasRequiredRetry$1;
+
+function requireRetry$1 () {
+	if (hasRequiredRetry$1) return retry$1;
+	hasRequiredRetry$1 = 1;
+	(function (exports) {
+		var RetryOperation = requireRetry_operation();
+
+		exports.operation = function(options) {
+		  var timeouts = exports.timeouts(options);
+		  return new RetryOperation(timeouts, {
+		      forever: options && (options.forever || options.retries === Infinity),
+		      unref: options && options.unref,
+		      maxRetryTime: options && options.maxRetryTime
+		  });
+		};
+
+		exports.timeouts = function(options) {
+		  if (options instanceof Array) {
+		    return [].concat(options);
+		  }
+
+		  var opts = {
+		    retries: 10,
+		    factor: 2,
+		    minTimeout: 1 * 1000,
+		    maxTimeout: Infinity,
+		    randomize: false
+		  };
+		  for (var key in options) {
+		    opts[key] = options[key];
+		  }
+
+		  if (opts.minTimeout > opts.maxTimeout) {
+		    throw new Error('minTimeout is greater than maxTimeout');
+		  }
+
+		  var timeouts = [];
+		  for (var i = 0; i < opts.retries; i++) {
+		    timeouts.push(this.createTimeout(i, opts));
+		  }
+
+		  if (options && options.forever && !timeouts.length) {
+		    timeouts.push(this.createTimeout(i, opts));
+		  }
+
+		  // sort the array numerically ascending
+		  timeouts.sort(function(a,b) {
+		    return a - b;
+		  });
+
+		  return timeouts;
+		};
+
+		exports.createTimeout = function(attempt, opts) {
+		  var random = (opts.randomize)
+		    ? (Math.random() + 1)
+		    : 1;
+
+		  var timeout = Math.round(random * Math.max(opts.minTimeout, 1) * Math.pow(opts.factor, attempt));
+		  timeout = Math.min(timeout, opts.maxTimeout);
+
+		  return timeout;
+		};
+
+		exports.wrap = function(obj, options, methods) {
+		  if (options instanceof Array) {
+		    methods = options;
+		    options = null;
+		  }
+
+		  if (!methods) {
+		    methods = [];
+		    for (var key in obj) {
+		      if (typeof obj[key] === 'function') {
+		        methods.push(key);
+		      }
+		    }
+		  }
+
+		  for (var i = 0; i < methods.length; i++) {
+		    var method   = methods[i];
+		    var original = obj[method];
+
+		    obj[method] = function retryWrapper(original) {
+		      var op       = exports.operation(options);
+		      var args     = Array.prototype.slice.call(arguments, 1);
+		      var callback = args.pop();
+
+		      args.push(function(err) {
+		        if (op.retry(err)) {
+		          return;
+		        }
+		        if (err) {
+		          arguments[0] = op.mainError();
+		        }
+		        callback.apply(this, arguments);
+		      });
+
+		      op.attempt(function() {
+		        original.apply(obj, args);
+		      });
+		    }.bind(obj, original);
+		    obj[method].options = options;
+		  }
+		}; 
+	} (retry$1));
+	return retry$1;
+}
+
+var retry;
+var hasRequiredRetry;
+
+function requireRetry () {
+	if (hasRequiredRetry) return retry;
+	hasRequiredRetry = 1;
+	retry = requireRetry$1();
+	return retry;
+}
+
+var hasRequiredPRetry;
+
+function requirePRetry () {
+	if (hasRequiredPRetry) return pRetry.exports;
+	hasRequiredPRetry = 1;
+	const retry = requireRetry();
+
+	const networkErrorMsgs = [
+		'Failed to fetch', // Chrome
+		'NetworkError when attempting to fetch resource.', // Firefox
+		'The Internet connection appears to be offline.', // Safari
+		'Network request failed' // `cross-fetch`
+	];
+
+	class AbortError extends Error {
+		constructor(message) {
+			super();
+
+			if (message instanceof Error) {
+				this.originalError = message;
+				({message} = message);
+			} else {
+				this.originalError = new Error(message);
+				this.originalError.stack = this.stack;
 			}
 
-			if (error instanceof AbortError) {
-				operation.stop();
-				reject(error.originalError);
-			} else if (error instanceof TypeError && !isNetworkError(error.message)) {
-				operation.stop();
-				reject(error);
-			} else {
-				decorateErrorWithCounts(error, attemptNumber, options);
+			this.name = 'AbortError';
+			this.message = message;
+		}
+	}
 
-				try {
-					await options.onFailedAttempt(error);
-				} catch (error) {
-					reject(error);
+	const decorateErrorWithCounts = (error, attemptNumber, options) => {
+		// Minus 1 from attemptNumber because the first attempt does not count as a retry
+		const retriesLeft = options.retries - (attemptNumber - 1);
+
+		error.attemptNumber = attemptNumber;
+		error.retriesLeft = retriesLeft;
+		return error;
+	};
+
+	const isNetworkError = errorMessage => networkErrorMsgs.includes(errorMessage);
+
+	const pRetry$1 = (input, options) => new Promise((resolve, reject) => {
+		options = {
+			onFailedAttempt: () => {},
+			retries: 10,
+			...options
+		};
+
+		const operation = retry.operation(options);
+
+		operation.attempt(async attemptNumber => {
+			try {
+				resolve(await input(attemptNumber));
+			} catch (error) {
+				if (!(error instanceof Error)) {
+					reject(new TypeError(`Non-error was thrown: "${error}". You should only throw errors.`));
 					return;
 				}
 
-				if (!operation.retry(error)) {
-					reject(operation.mainError());
+				if (error instanceof AbortError) {
+					operation.stop();
+					reject(error.originalError);
+				} else if (error instanceof TypeError && !isNetworkError(error.message)) {
+					operation.stop();
+					reject(error);
+				} else {
+					decorateErrorWithCounts(error, attemptNumber, options);
+
+					try {
+						await options.onFailedAttempt(error);
+					} catch (error) {
+						reject(error);
+						return;
+					}
+
+					if (!operation.retry(error)) {
+						reject(operation.mainError());
+					}
 				}
 			}
-		}
+		});
 	});
-});
 
-pRetry$1.exports = pRetry;
-// TODO: remove this in the next major version
-pRetry$1.exports.default = pRetry;
+	pRetry.exports = pRetry$1;
+	// TODO: remove this in the next major version
+	pRetry.exports.default = pRetry$1;
 
-pRetry$1.exports.AbortError = AbortError;
-
-var pRetryExports = pRetry$1.exports;
+	pRetry.exports.AbortError = AbortError;
+	return pRetry.exports;
+}
 
 var Stream$8 = stream$2.Stream;
 var util$a = require$$1$2;
@@ -19910,27 +19944,35 @@ FormData$2.prototype.toString = function () {
   return '[object FormData]';
 };
 
-// https://github.com/electron/electron/issues/2288
-function isElectron() {
-    // Renderer process
-    if (typeof window !== 'undefined' && typeof window.process === 'object' && window.process.type === 'renderer') {
-        return true;
-    }
+var isElectron_1;
+var hasRequiredIsElectron;
 
-    // Main process
-    if (typeof process !== 'undefined' && typeof process.versions === 'object' && !!process.versions.electron) {
-        return true;
-    }
+function requireIsElectron () {
+	if (hasRequiredIsElectron) return isElectron_1;
+	hasRequiredIsElectron = 1;
+	// https://github.com/electron/electron/issues/2288
+	function isElectron() {
+	    // Renderer process
+	    if (typeof window !== 'undefined' && typeof window.process === 'object' && window.process.type === 'renderer') {
+	        return true;
+	    }
 
-    // Detect the user agent when the `nodeIntegration` option is set to false
-    if (typeof navigator === 'object' && typeof navigator.userAgent === 'string' && navigator.userAgent.indexOf('Electron') >= 0) {
-        return true;
-    }
+	    // Main process
+	    if (typeof process !== 'undefined' && typeof process.versions === 'object' && !!process.versions.electron) {
+	        return true;
+	    }
 
-    return false;
+	    // Detect the user agent when the `nodeIntegration` option is set to false
+	    if (typeof navigator === 'object' && typeof navigator.userAgent === 'string' && navigator.userAgent.indexOf('Electron') >= 0) {
+	        return true;
+	    }
+
+	    return false;
+	}
+
+	isElectron_1 = isElectron;
+	return isElectron_1;
 }
-
-var isElectron_1 = isElectron;
 
 var methods$3 = {};
 
@@ -21729,12 +21771,12 @@ function requireWebClient () {
 		const path_1 = require$$1$3;
 		const zlib_1 = __importDefault(zlib$2);
 		const util_1 = require$$1$2;
-		const is_stream_1 = __importDefault(isStreamExports);
+		const is_stream_1 = __importDefault(requireIsStream());
 		const p_queue_1 = __importDefault(dist$4);
-		const p_retry_1 = __importStar(pRetryExports);
+		const p_retry_1 = __importStar(requirePRetry());
 		const axios_1$1 = __importDefault(axios_1);
 		const form_data_1 = __importDefault(form_data);
-		const is_electron_1 = __importDefault(isElectron_1);
+		const is_electron_1 = __importDefault(requireIsElectron());
 		const methods_1 = requireMethods();
 		const instrument_1 = instrument;
 		const errors_1 = errors$3;
@@ -81238,13 +81280,13 @@ const addFormValue = async (form, key, value) => {
     }
 };
 
-var __classPrivateFieldSet$2 = (window && window.__classPrivateFieldSet) || function (receiver, state, value, kind, f) {
+var __classPrivateFieldSet$2 = (global && global.__classPrivateFieldSet) || function (receiver, state, value, kind, f) {
     if (kind === "m") throw new TypeError("Private method is not writable");
     if (kind === "a" && !f) throw new TypeError("Private accessor was defined without a setter");
     if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot write private member to an object whose class did not declare it");
     return (kind === "a" ? f.call(receiver, value) : f ? f.value = value : state.set(receiver, value)), value;
 };
-var __classPrivateFieldGet$2 = (window && window.__classPrivateFieldGet) || function (receiver, state, kind, f) {
+var __classPrivateFieldGet$2 = (global && global.__classPrivateFieldGet) || function (receiver, state, kind, f) {
     if (kind === "a" && !f) throw new TypeError("Private accessor was defined without a getter");
     if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot read private member from an object whose class did not declare it");
     return kind === "m" ? f : kind === "a" ? f.call(receiver) : f ? f.value : state.get(receiver);
@@ -82204,13 +82246,13 @@ const isToolMessage = (message) => {
     return message?.role === 'tool';
 };
 
-var __classPrivateFieldSet$1 = (window && window.__classPrivateFieldSet) || function (receiver, state, value, kind, f) {
+var __classPrivateFieldSet$1 = (global && global.__classPrivateFieldSet) || function (receiver, state, value, kind, f) {
     if (kind === "m") throw new TypeError("Private method is not writable");
     if (kind === "a" && !f) throw new TypeError("Private accessor was defined without a setter");
     if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot write private member to an object whose class did not declare it");
     return (kind === "a" ? f.call(receiver, value) : f ? f.value = value : state.set(receiver, value)), value;
 };
-var __classPrivateFieldGet$1 = (window && window.__classPrivateFieldGet) || function (receiver, state, kind, f) {
+var __classPrivateFieldGet$1 = (global && global.__classPrivateFieldGet) || function (receiver, state, kind, f) {
     if (kind === "a" && !f) throw new TypeError("Private accessor was defined without a getter");
     if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot read private member from an object whose class did not declare it");
     return kind === "m" ? f : kind === "a" ? f.call(receiver) : f ? f.value : state.get(receiver);
@@ -82720,12 +82762,12 @@ class ChatCompletionRunner extends AbstractChatCompletionRunner {
     }
 }
 
-var __classPrivateFieldGet = (window && window.__classPrivateFieldGet) || function (receiver, state, kind, f) {
+var __classPrivateFieldGet = (global && global.__classPrivateFieldGet) || function (receiver, state, kind, f) {
     if (kind === "a" && !f) throw new TypeError("Private accessor was defined without a getter");
     if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot read private member from an object whose class did not declare it");
     return kind === "m" ? f : kind === "a" ? f.call(receiver) : f ? f.value : state.get(receiver);
 };
-var __classPrivateFieldSet = (window && window.__classPrivateFieldSet) || function (receiver, state, value, kind, f) {
+var __classPrivateFieldSet = (global && global.__classPrivateFieldSet) || function (receiver, state, value, kind, f) {
     if (kind === "m") throw new TypeError("Private method is not writable");
     if (kind === "a" && !f) throw new TypeError("Private accessor was defined without a setter");
     if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot write private member to an object whose class did not declare it");
